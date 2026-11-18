@@ -1,109 +1,90 @@
-```diff
-+ 29 july 2026
-+ new build system seems to be working great for both x64 and arm64.
-+ I'd like to understand if it's possible for me to codesign uxplay-windows before making a new release
+# uxplay-windows: Companion edition
+
+A fork of [leapbtw/uxplay-windows](https://github.com/leapbtw/uxplay-windows) that turns the AirPlay receiver into a small media companion for Windows: a floating now-playing overlay with cover art, remote control of the playing device, and optional time-synced lyrics.
+
+All original features are kept (tray icon, UxPlay engine, autostart, `arguments.txt`, Bluetooth discovery, renderer selection).
+
+> **Status:** works in daily use with an iPhone, but this is a hobby project. There are no prebuilt releases yet; build it from source (see below). Only Windows x64 has been tested.
+
+## What is new
+
+### Floating overlay
+- Frameless, always-on-top mini player in the top-right corner (drag it anywhere, the position is remembered).
+- Compact mode (cover, title, artist, thin progress line) and expanded mode (album, progress bar with times, transport buttons). Double-click to switch.
+- Opacity 20-100%, size 75-150%, optional click-through, fade animations that can be turned off.
+- Appears when playback starts, updates on every track change, shows pause, and hides itself some seconds after the device disconnects (all configurable).
+
+### Remote control
+Play/pause, next and previous work **from the PC**, over DACP (the protocol the Apple Remote used). The app finds the device's `_dacp._tcp` service via mDNS and sends the commands with the `Active-Remote` header UxPlay already receives. Buttons stay dimmed, with the reason in a tooltip, until the device has actually been found.
+
+### Optional lyrics
+Time-synced lyrics from [LRCLIB](https://lrclib.net), shown in the overlay (click the cover to switch between cover and lyrics) and on the Now playing page, with a timing offset to compensate for AirPlay buffering. **Off by default**: when enabled, the title, artist, album and length of the playing track are sent to lrclib.net. Tracks missing from LRCLIB simply show "No lyrics found".
+
+### Redesigned main window
+Dark, Windows 11 style window with a sidebar: Now playing, Overlay settings, Receiver, General, Logs.
+
+## What is not possible (and why)
+
+- **Volume and seeking from the PC.** DACP `setproperty` commands are answered with HTTP 400 by iOS unless the remote is paired. Implementing pairing was not worth it, so these are not offered. (The volume slider and seek bar were built, verified against a real iPhone, and removed rather than shipped as fake controls.)
+- **Instant pause detection.** iOS sends no "paused" message. A pause is detected when audio packets stop arriving for about 1.5 seconds.
+- **Lyrics for every song.** LRCLIB is a community database. New or niche tracks may be missing, and the app does not guess: weak matches are rejected.
+- **Source app name** (TikTok, Instagram, ...): not provided by AirPlay.
+
+## How it works
+
+```
+iPhone --AirPlay--> UxPlay engine (libuxplay, C/C++)
+                        | event callback (connect, metadata, cover, progress, DACP ids, audio activity)
+                        v
+                  AirPlayEvents  --queued signals-->  MediaState (model)
+                                                          |        |
+                                      DacpClient <--------+        +--> LyricsState --> LyricsProvider (LRCLIB)
+                                      (mDNS + HTTP)                |
+                                                          OverlayWindow / Now playing page
 ```
 
-# FREE AirPlay to your Windows PC
-Free as both in "freedom" and "free beer"!
+The engine fork adds one small, additive C API (`uxplay_set_event_callback` in `uxplay_api.h`) and leaves UxPlay's behaviour and command-line options unchanged. The Qt side never touches GStreamer or engine threads: every event is copied and queued to the GUI thread.
 
-## Installation
-Download the latest version of uxplay-windows from [**releases**](https://github.com/leapbtw/uxplay-windows/releases/latest).
+Main sources in `src/`: `airplayevents`, `mediastate`, `dacpclient`, `lyrics*`, `overlay*`, `nowplayingpage`, `theme`.
 
-After installing, control uxplay-windows from it's [tray icon](https://www.odu.edu/sites/default/files/documents/win10-system-tray.pdf)! Right-click it to start or stop AirPlay. \
-You can also set it to run automatically when your PC starts
+## Building
 
-## WIKI (FAQ / Troubleshooting / Help)
-Please take a look at the [Wiki](https://github.com/leapbtw/uxplay-windows/wiki), it should contain everything you're looking for
+Requirements (Windows 10/11, x64): [MSYS2](https://www.msys2.org/) in `C:\msys64`, Visual Studio Build Tools with the C++ workload (needed for the Bonjour components), Python 3.14 for Windows, and the .NET SDK for the MSI.
 
-> [!IMPORTANT]
-> *Why is Windows Defender complaining during installation?*
-> 
-> ![alt text](https://raw.githubusercontent.com/leapbtw/uxplay-windows/refs/heads/x64/stuff/defender.png "defender")
->
-> Just click on `More info` and it will let you install. It complains because the executable is not signed. If you don't trust this software you can always build it yourself! See below.
->
-> If prompted by Windows Firewall, please **allow** uxplay-windows to ensure it functions properly.
+```powershell
+git clone --recurse-submodules -b companion https://github.com/ChestnutBodziu/uxplay-windows.git
+cd uxplay-windows
+.\build.ps1 bootstrap -Architecture x64
+.\build.ps1 package -Architecture x64 -SkipInstaller   # portable ZIP, no MSI
+```
 
-<br>
-<details>
-<summary><strong>Building</strong></summary>
+The result is in `out\x64\artifacts` and, unpacked, in `release\`. See [docs/DEVELOPERS-GUIDE.md](docs/DEVELOPERS-GUIDE.md) for all commands. `scripts/build-bonjour.ps1` picks the newest installed MSVC toolset, so newer Visual Studio versions than 2022 work.
 
-*How do I build this software myself?*
- 
-Please see [BUILDING.md](./docs/BUILDING.md)
-<br>
-</details>
+Run the app from `release\uxplay-windows.exe` and allow it through Windows Firewall when asked. The iPhone and the PC must be on the same network.
 
-<details>
-<summary><strong>Advanced configuration</strong></summary>
+## Configuration
 
-<br>
-
-UxPlay arguments are read from `arguments.txt`.
-
-Configuration precedence:
+UxPlay arguments are read from `arguments.txt`, in this order:
 
 1. `%ProgramData%\uxplay-windows\arguments.txt`
 2. `%APPDATA%\leapbtw\uxplay-windows\arguments.txt`
 3. built-in default: `-n uxplay-windows -nh`
 
-The machine-wide file takes precedence when it exists, allowing administrators
-to enforce a shared configuration. When it is absent, each user can maintain
-their own configuration under `%APPDATA%`.
+Environment variables are expanded when the app starts, e.g. `-n %COMPUTERNAME% -nh`. Overlay and lyrics settings are stored per user and edited in the app.
 
-Environment variables are expanded when the app starts. For example:
+The executable is not code-signed, so Windows Defender SmartScreen may ask for confirmation ("More info" > "Run anyway").
 
-```text
--n %COMPUTERNAME% -nh
-```
+## Privacy
 
-</details>
+The app talks to your device on the local network. The only internet access added by this fork is the optional lyrics lookup on lrclib.net, which is off until you turn it on.
 
-<details>
-<summary><strong>Local development (x64 and ARM64)</strong></summary>
+## Credits and license
 
-<br>
+Built on the work of others:
 
-After installing MSYS2, the complete local build is one PowerShell command:
+- [leapbtw/uxplay-windows](https://github.com/leapbtw/uxplay-windows): the Windows app, build system and installer.
+- [UxPlay](https://github.com/FDH2/UxPlay): the AirPlay engine (via [leapbtw/libuxplay](https://github.com/leapbtw/libuxplay), forked as [ChestnutBodziu/libuxplay](https://github.com/ChestnutBodziu/libuxplay)).
+- [Apple mDNSResponder](https://github.com/apple-oss-distributions/mDNSResponder), Qt and GStreamer.
+- [LRCLIB](https://lrclib.net) for lyrics.
 
-```powershell
-.\build.ps1 package -Architecture x64
-.\build.ps1 package -Architecture arm64
-```
-
-Each command produces a verified portable ZIP and MSI under the corresponding
-`out\<architecture>\artifacts` directory. See the [developer
-guide](./docs/DEVELOPERS-GUIDE.md) for prerequisites and additional commands.
-
-</details>
-
-<details>
-<summary><strong>TODO</strong></summary>
-
-<br>
-
-- make an update checker
-- include uxplay.exe for debugging purposes
-- ~~pass arguments from uxplay-windows.exe to uxplay~~ or maybe not
-
-</details>
-
-<details>
-<summary><strong>Known Issues</strong></summary>
-
-<br>
-
-~~uxplay bugs out when waking PC from Sleep~~
-~~you can fix this by killing uxplay-windows.exe and restarting Bonjour Service, and restarting uxplay.exe. Also restarting your PC might fix this.~~  \
-Apparently moving from Bonjour PS to mDNSResponder fixed it? :)
-
-- Sometimes just after connecting the iPhone to uxplay-windows, the stream appears but frozen. Reconnecting a second time fixes this. Probably an upstream issue maybe already fixed in the newer UxPlay version. I need to investigate further
-
-</details>
-
-## Reporting Issues
-Please report issues related to the build system created with GitHub Actions in this repository. For issues related to other parts of this software, report them in their respective repositories.
-
-## License
-Please take a look at the [LICENSE](./docs/LICENSE.rtf).
+This project is licensed under the **GNU General Public License v3.0**, see [LICENSE](LICENSE). Third-party components keep their own licenses (listed in [docs/LICENSE.rtf](docs/LICENSE.rtf)).
