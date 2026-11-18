@@ -117,16 +117,26 @@ if ($LASTEXITCODE -ne 0) {
     throw "Unable to apply the mDNSResponder patch."
 }
 
+# The Bonjour projects pin toolset v143 (VS 2022). Newer Visual Studio installs
+# ship only their own toolset (e.g. v145), so pick the newest installed one.
+$toolsetArgs = @()
+$vcRoot = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $msbuild))) "Microsoft\VC"
+$installedToolsets = Get-ChildItem -Path (Join-Path $vcRoot "v*\Platforms\$msbuildPlatform\PlatformToolsets\v*") -Directory -ErrorAction SilentlyContinue |
+    Sort-Object Name -Descending
+if ($installedToolsets -and ($installedToolsets.Name -notcontains "v143")) {
+    $toolsetArgs = @("/p:PlatformToolset=$($installedToolsets[0].Name)")
+}
+
 & $msbuild `
     (Join-Path $sourceDir "mDNSWindows\DLL\dnssd.vcxproj") `
-    /m /t:Build /p:Configuration=Release /p:Platform=$msbuildPlatform
+    /m /t:Build /p:Configuration=Release /p:Platform=$msbuildPlatform @toolsetArgs
 if ($LASTEXITCODE -ne 0) {
     throw "dnssd.dll build failed."
 }
 
 & $msbuild `
     (Join-Path $sourceDir "mDNSWindows\SystemService\mDNSResponder.vcxproj") `
-    /m /t:Build /p:Configuration=Release /p:Platform=$msbuildPlatform
+    /m /t:Build /p:Configuration=Release /p:Platform=$msbuildPlatform @toolsetArgs
 if ($LASTEXITCODE -ne 0) {
     throw "mDNSResponder.exe build failed."
 }
