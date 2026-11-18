@@ -1,4 +1,6 @@
+#include "airplayevents.h"
 #include "mainwindow.h"
+#include "mediastate.h"
 #include "sessionlog.h"
 #include <QApplication>
 #include <QDir>
@@ -321,6 +323,9 @@ int main(int argc, char *argv[]) {
     }
 
     int exitCode = 0;
+    // Declared before the window so they are destroyed after the engine stopped.
+    AirPlayEvents airplayEvents;
+    MediaState mediaState(&airplayEvents);
     {
         MainWindow mainWindow;
 #ifdef _WIN32
