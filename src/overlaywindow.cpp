@@ -246,9 +246,16 @@ void OverlayWindow::paintEvent(QPaintEvent *) {
         title = tr("Waiting for AirPlay");
         subtitle = tr("Connect a device to start");
     } else if (!hasTrack) {
-        title = tr("Connected");
         subtitle = m_media->deviceName();
-        detail = tr("Waiting for playback");
+        if (state == MediaState::State::Playing || state == MediaState::State::Paused) {
+            // Audio is flowing but the device sent no track information (video
+            // apps and the like). AirPlay does not tell which app it is.
+            title = tr("Audio from device");
+            detail = tr("No track information");
+        } else {
+            title = tr("Connected");
+            detail = tr("Waiting for playback");
+        }
     } else {
         title = m_media->title();
         subtitle = m_media->artist();

@@ -12,7 +12,7 @@ struct LyricLine {
 struct Lyrics {
     bool synced = false;
     bool instrumental = false;
-    QString source; // e.g. "LRCLIB", "YouTube Music (LyricFind)"
+    QString source; // where the lyrics came from, e.g. "LRCLIB"
     QVector<LyricLine> lines;
 
     bool isEmpty() const { return lines.isEmpty(); }

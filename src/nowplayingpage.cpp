@@ -128,6 +128,7 @@ NowPlayingPage::NowPlayingPage(const MediaState *media, const LyricsState *lyric
 
     connect(m_media, &MediaState::stateChanged, this, &NowPlayingPage::refreshState);
     connect(m_media, &MediaState::deviceChanged, this, &NowPlayingPage::refreshState);
+    connect(m_media, &MediaState::stateChanged, this, &NowPlayingPage::refreshTrack);
     connect(m_media, &MediaState::trackChanged, this, &NowPlayingPage::refreshTrack);
     connect(m_media, &MediaState::coverChanged, this, &NowPlayingPage::refreshCover);
     connect(m_media, &MediaState::positionChanged, this, &NowPlayingPage::refreshPosition);
@@ -181,9 +182,21 @@ void NowPlayingPage::refreshState() {
 
 void NowPlayingPage::refreshTrack() {
     const bool hasTrack = !m_media->title().isEmpty();
-    m_title->setText(hasTrack ? m_media->title() : tr("Nothing playing"));
-    m_artist->setText(m_media->artist());
-    m_album->setText(m_media->album());
+    const MediaState::State state = m_media->state();
+    if (hasTrack) {
+        m_title->setText(m_media->title());
+        m_artist->setText(m_media->artist());
+        m_album->setText(m_media->album());
+    } else if (state == MediaState::State::Playing || state == MediaState::State::Paused) {
+        // Audio is flowing without track information (e.g. video apps).
+        m_title->setText(tr("Audio from device"));
+        m_artist->setText(m_media->deviceName());
+        m_album->setText(tr("No track information"));
+    } else {
+        m_title->setText(tr("Nothing playing"));
+        m_artist->clear();
+        m_album->clear();
+    }
 }
 
 void NowPlayingPage::refreshCover() {

@@ -50,7 +50,7 @@ Dark, Windows 11 style window with a sidebar: Now playing, Overlay settings, Rec
 - **Volume and seeking from the PC.** DACP `setproperty` commands are answered with HTTP 400 by iOS unless the remote is paired. Implementing pairing was not worth it, so these are not offered. (The volume slider and seek bar were built, verified against a real iPhone, and removed rather than shipped as fake controls.)
 - **Instant pause detection.** iOS sends no "paused" message. A pause is detected when audio packets stop arriving for about 1.5 seconds.
 - **Lyrics for every song.** LRCLIB is a community database. New or niche tracks may be missing, and the app does not guess: weak matches are rejected.
-- **Source app name** (TikTok, Instagram, ...): not provided by AirPlay.
+- **Name of the source app.** AirPlay does not say which app is playing. When audio arrives without track information (for example from video apps), the overlay shows "Audio from device" instead of guessing.
 
 ## How it works
 
