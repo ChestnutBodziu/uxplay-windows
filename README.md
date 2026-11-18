@@ -6,6 +6,28 @@ All original features are kept (tray icon, UxPlay engine, autostart, `arguments.
 
 > **Status:** works in daily use with an iPhone, but this is a hobby project. There are no prebuilt releases yet; build it from source (see below). Only Windows x64 has been tested.
 
+## Screenshots
+
+**Floating overlay**, compact and expanded:
+
+<p>
+  <img src="docs/screenshots/overlay-compact.png" alt="Compact overlay showing cover, title, artist and progress" width="380">
+  <img src="docs/screenshots/overlay-expanded.png" alt="Expanded overlay with album, progress bar and transport buttons" width="380">
+</p>
+
+**Time-synced lyrics** (click the cover to switch between cover and lyrics):
+
+<p>
+  <img src="docs/screenshots/overlay-compact-lyrics.png" alt="Compact overlay showing the current lyric line" width="380">
+  <img src="docs/screenshots/overlay-expanded-lyrics.png" alt="Expanded overlay showing previous, current and next lyric lines" width="380">
+</p>
+
+**Main window:**
+
+![Now playing page](docs/screenshots/main-window-now-playing.png)
+![Overlay settings page](docs/screenshots/main-window-overlay-settings.png)
+![Receiver settings page](docs/screenshots/main-window-receiver.png)
+
 ## What is new
 
 ### Floating overlay
