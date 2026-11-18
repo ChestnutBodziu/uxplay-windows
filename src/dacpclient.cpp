@@ -114,7 +114,12 @@ void DacpClient::beginResolve() {
     m_address.clear();
     setStatus(Status::Resolving);
 
-    const QByteArray name = ("iTunes_Ctrl_" + m_dacpId).toUtf8();
+    // Seen in a real session: the DACP-ID header was 15 hex digits (leading zero
+    // dropped) while the advertised service name has 16. Try the zero-padded
+    // name first, then the id exactly as received, alternating on retries.
+    const QString padded = m_dacpId.rightJustified(16, QLatin1Char('0'));
+    const QString chosen = (m_attempts % 2 == 0) ? padded : m_dacpId;
+    const QByteArray name = ("iTunes_Ctrl_" + chosen).toUtf8();
     qInfo().noquote() << "[dacp] resolving" << name << "attempt" << (m_attempts + 1);
     const DNSServiceErrorType error = DNSServiceResolve(
         &m_resolveRef, 0, kDNSServiceInterfaceIndexAny, name.constData(),
