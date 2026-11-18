@@ -4,7 +4,15 @@ A fork of [leapbtw/uxplay-windows](https://github.com/leapbtw/uxplay-windows) th
 
 All original features are kept (tray icon, UxPlay engine, autostart, `arguments.txt`, Bluetooth discovery, renderer selection).
 
-> **Status:** works in daily use with an iPhone, but this is a hobby project. There are no prebuilt releases yet; build it from source (see below). Only Windows x64 has been tested.
+> **Status:** works in daily use with an iPhone, but this is a hobby project. Only Windows x64 has been tested.
+
+## Download
+
+1. Open the [latest release](https://github.com/ChestnutBodziu/uxplay-windows/releases/latest) and download `uxplay-windows-x64-portable.zip`.
+2. Extract it anywhere and run `uxplay-windows.exe`. Allow it through Windows Firewall when asked.
+3. On your iPhone or iPad (same network), choose **uxplay-windows** in AirPlay.
+
+The app is not code-signed, so Windows SmartScreen may warn you (**More info** > **Run anyway**). You can compare the ZIP's SHA-256 with the one in the release notes. Prefer to build it yourself? See [Building](#building).
 
 ## Screenshots
 
