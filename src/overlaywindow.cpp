@@ -1,6 +1,8 @@
 #include "overlaywindow.h"
 
 #include "dacpclient.h"
+#include "lyrics.h"
+#include "lyricsstate.h"
 #include "mediastate.h"
 #include "overlaysettings.h"
 
@@ -56,8 +58,9 @@ void drawElided(QPainter &p, const QRect &rect, const QFont &font,
 } // namespace
 
 OverlayWindow::OverlayWindow(const MediaState *media, DacpClient *dacp,
-                             OverlaySettings *settings, QWidget *parent)
-    : QWidget(parent), m_media(media), m_dacp(dacp), m_settings(settings) {
+                             LyricsState *lyrics, OverlaySettings *settings,
+                             QWidget *parent)
+    : QWidget(parent), m_media(media), m_dacp(dacp), m_lyrics(lyrics), m_settings(settings) {
     setMouseTracking(true);
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
@@ -90,6 +93,8 @@ OverlayWindow::OverlayWindow(const MediaState *media, DacpClient *dacp,
     connect(m_media, &MediaState::deviceChanged, this, repaint);
     connect(m_media, &MediaState::positionChanged, this, repaint);
     connect(m_dacp, &DacpClient::statusChanged, this, repaint);
+    connect(m_lyrics, &LyricsState::changed, this, repaint);
+    connect(m_lyrics, &LyricsState::currentLineChanged, this, repaint);
     connect(m_settings, &OverlaySettings::changed, this,
             &OverlayWindow::applySettings);
 
@@ -250,10 +255,14 @@ void OverlayWindow::paintEvent(QPaintEvent *) {
         detail = m_media->album();
     }
 
+    const bool lyricsView = lyricsViewActive();
+    const bool lyricsOnly = expanded && lyricsView;
+
     const int pad = expanded ? 12 : 10;
     const int coverSize = expanded ? 96 : 64;
     const QRect coverRect(pad, pad, coverSize, coverSize);
 
+    if (!lyricsOnly) {
     QPainterPath coverPath;
     coverPath.addRoundedRect(coverRect, 10, 10);
     p.save();
@@ -287,8 +296,18 @@ void OverlayWindow::paintEvent(QPaintEvent *) {
     } else {
         drawElided(p, QRect(textX, 12, textWidth, 22), uiFont(14, true),
                    kTextPrimary, title);
-        drawElided(p, QRect(textX, 36, textWidth, 20), uiFont(12, false),
-                   kTextSecondary, subtitle);
+        if (lyricsView) {
+            drawElided(p, QRect(textX, 36, textWidth, 20), uiFont(12, false),
+                       kAccent, lyricsLine());
+        } else {
+            drawElided(p, QRect(textX, 36, textWidth, 20), uiFont(12, false),
+                       kTextSecondary, subtitle);
+        }
+    }
+
+    } // !lyricsOnly
+    if (lyricsOnly) {
+        paintLyricsView(p, QRectF(pad, 10, bounds.width() - 2 * pad, 62));
     }
 
     // Transport buttons. Enabled only when the device really accepts remote
@@ -338,6 +357,96 @@ void OverlayWindow::paintEvent(QPaintEvent *) {
                                  bar.height()),
                           1.25, 1.25);
     }
+}
+
+QPoint OverlayWindow::logicalPoint(const QPointF &windowPos) const {
+    return (windowPos / (m_settings->scalePercent() / 100.0)).toPoint();
+}
+
+bool OverlayWindow::lyricsViewActive() const {
+    return m_settings->lyricsEnabled() && m_settings->lyricsView() &&
+           m_media->state() != MediaState::State::Disconnected &&
+           !m_media->title().isEmpty();
+}
+
+bool OverlayWindow::lyricsToggleAvailable() const {
+    return m_settings->lyricsEnabled() &&
+           m_media->state() != MediaState::State::Disconnected &&
+           !m_media->title().isEmpty();
+}
+
+QRect OverlayWindow::lyricsToggleRect() const {
+    if (m_settings->mode() == OverlaySettings::Mode::Expanded) {
+        return lyricsViewActive() ? QRect(12, 10, kExpandedSize.width() - 24, 62)
+                                  : QRect(12, 12, 96, 96);
+    }
+    return QRect(10, 10, 64, 64);
+}
+
+// The line shown in the compact overlay, or a short status message.
+QString OverlayWindow::lyricsLine() const {
+    switch (m_lyrics->status()) {
+    case LyricsState::Status::Off:
+    case LyricsState::Status::Idle:
+        return QString();
+    case LyricsState::Status::Loading:
+        return tr("Loading lyrics...");
+    case LyricsState::Status::NotFound:
+        return tr("No lyrics found");
+    case LyricsState::Status::Error:
+        return tr("Lyrics unavailable");
+    case LyricsState::Status::Ready:
+        break;
+    }
+    const Lyrics &lyrics = m_lyrics->lyrics();
+    if (lyrics.instrumental) {
+        return tr("Instrumental");
+    }
+    if (!lyrics.synced) {
+        return tr("Lyrics are not time-synced");
+    }
+    const int index = m_lyrics->currentIndex();
+    if (index < 0 || lyrics.lines.at(index).text.isEmpty()) {
+        return QStringLiteral("\u266A");
+    }
+    return lyrics.lines.at(index).text;
+}
+
+void OverlayWindow::paintLyricsView(QPainter &p, const QRectF &area) const {
+    const Lyrics &lyrics = m_lyrics->lyrics();
+    const bool ready = m_lyrics->status() == LyricsState::Status::Ready &&
+                       lyrics.synced && !lyrics.instrumental;
+    if (!ready) {
+        // Status message, centered.
+        p.setFont(uiFont(13, false));
+        p.setPen(kTextSecondary);
+        const QString text = lyricsLine();
+        p.drawText(area, Qt::AlignCenter,
+                   QFontMetrics(p.font()).elidedText(text, Qt::ElideRight,
+                                                     int(area.width())));
+        return;
+    }
+
+    const int index = m_lyrics->currentIndex();
+    const auto lineAt = [&](int i) -> QString {
+        return i >= 0 && i < lyrics.lines.size() ? lyrics.lines.at(i).text : QString();
+    };
+    const auto drawLine = [&](const QRectF &rect, const QFont &font, const QColor &color,
+                              const QString &text) {
+        p.setFont(font);
+        p.setPen(color);
+        p.drawText(rect, Qt::AlignCenter,
+                   QFontMetrics(font).elidedText(text, Qt::ElideRight, int(rect.width())));
+    };
+    const QString current = lineAt(index).isEmpty() ? QStringLiteral("\u266A") : lineAt(index);
+    QColor dim = kTextSecondary;
+    dim.setAlpha(150);
+    drawLine(QRectF(area.left(), area.top(), area.width(), 16), uiFont(11, false), dim,
+             lineAt(index - 1));
+    drawLine(QRectF(area.left(), area.top() + 18, area.width(), 24), uiFont(16, true),
+             kTextPrimary, current);
+    drawLine(QRectF(area.left(), area.top() + 44, area.width(), 16), uiFont(11, false), dim,
+             lineAt(index + 1));
 }
 
 bool OverlayWindow::buttonsVisible() const {
@@ -465,6 +574,12 @@ void OverlayWindow::mousePressEvent(QMouseEvent *event) {
         event->accept();
         return;
     }
+    if (lyricsToggleAvailable() &&
+        lyricsToggleRect().contains(logicalPoint(event->position()))) {
+        m_pressedToggle = true; // a click toggles cover/lyrics; no drag
+        event->accept();
+        return;
+    }
     m_dragging = true;
     m_dragOffset = event->globalPosition().toPoint() - frameGeometry().topLeft();
     event->accept();
@@ -481,7 +596,13 @@ void OverlayWindow::mouseMoveEvent(QMouseEvent *event) {
         m_hover = hit;
         update();
     }
-    if (hit != Button::None && !buttonEnabled() && m_dacp) {
+    const bool overToggle = lyricsToggleAvailable() &&
+                            lyricsToggleRect().contains(logicalPoint(event->position()));
+    if (overToggle) {
+        QToolTip::showText(event->globalPosition().toPoint(),
+                           m_settings->lyricsView() ? tr("Show the cover") : tr("Show lyrics"),
+                           this);
+    } else if (hit != Button::None && !buttonEnabled() && m_dacp) {
         QToolTip::showText(event->globalPosition().toPoint(),
                            m_dacp->unavailableReason(), this);
     } else {
@@ -503,6 +624,15 @@ void OverlayWindow::mouseReleaseEvent(QMouseEvent *event) {
         event->accept();
         return;
     }
+    if (m_pressedToggle) {
+        m_pressedToggle = false;
+        if (lyricsToggleAvailable() &&
+            lyricsToggleRect().contains(logicalPoint(event->position()))) {
+            m_settings->setLyricsView(!m_settings->lyricsView());
+        }
+        event->accept();
+        return;
+    }
     if (m_dragging) {
         m_dragging = false;
         m_settings->setPosition(pos());
@@ -516,7 +646,9 @@ void OverlayWindow::mouseDoubleClickEvent(QMouseEvent *event) {
     }
     // A fast second click on a button is a second press, not a mode switch.
     const Button hit = buttonAt(event->position());
-    if (hit != Button::None) {
+    if (hit != Button::None ||
+        (lyricsToggleAvailable() &&
+         lyricsToggleRect().contains(logicalPoint(event->position())))) {
         mousePressEvent(event);
         return;
     }
@@ -540,6 +672,10 @@ void OverlayWindow::contextMenuEvent(QContextMenuEvent *event) {
     QAction *expanded = menu.addAction(tr("Expanded mode"));
     expanded->setCheckable(true);
     expanded->setChecked(m_settings->mode() == OverlaySettings::Mode::Expanded);
+    // Turning this on is the opt-in: title, artist and album go to lrclib.net.
+    QAction *lyricsView = menu.addAction(tr("Show lyrics (looked up on lrclib.net)"));
+    lyricsView->setCheckable(true);
+    lyricsView->setChecked(m_settings->lyricsEnabled());
     QAction *clickThrough = menu.addAction(tr("Click-through (use tray menu to undo)"));
     clickThrough->setCheckable(true);
     clickThrough->setChecked(m_settings->clickThrough());
@@ -553,6 +689,11 @@ void OverlayWindow::contextMenuEvent(QContextMenuEvent *event) {
                                 : OverlaySettings::Mode::Compact);
     } else if (chosen == clickThrough) {
         m_settings->setClickThrough(clickThrough->isChecked());
+    } else if (chosen == lyricsView) {
+        m_settings->setLyricsEnabled(lyricsView->isChecked());
+        if (lyricsView->isChecked()) {
+            m_settings->setLyricsView(true); // show them right away
+        }
     } else if (chosen == hide) {
         m_settings->setEnabled(false);
     }

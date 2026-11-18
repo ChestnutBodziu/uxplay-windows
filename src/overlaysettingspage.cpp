@@ -93,6 +93,36 @@ OverlaySettingsPage::OverlaySettingsPage(OverlaySettings *settings, QWidget *par
     grid->addWidget(m_opacityValue, 2, 2);
     root->addLayout(grid);
 
+    root->addWidget(sectionTitle(tr("Lyrics (online)")));
+    m_lyrics = new QCheckBox(tr("Show lyrics"));
+    root->addWidget(m_lyrics);
+    auto *lyricsNote = new QLabel(
+        tr("Looks lyrics up on lrclib.net. Only the title, artist, album and track "
+           "length are sent, and only while this is on. Click the cover in the "
+           "overlay to switch between cover and lyrics."));
+    lyricsNote->setObjectName("muted");
+    lyricsNote->setWordWrap(true);
+    lyricsNote->setContentsMargins(28, 0, 0, 0);
+    root->addWidget(lyricsNote);
+
+    // Timing: slider in 50 ms steps; positive shows each line earlier.
+    auto *timingRow = new QHBoxLayout;
+    timingRow->setContentsMargins(28, 0, 0, 0);
+    auto *timingLabel = new QLabel(tr("Timing"));
+    m_lyricsOffset = makeSlider(OverlaySettings::kMinLyricsOffsetMs / 50,
+                                OverlaySettings::kMaxLyricsOffsetMs / 50);
+    m_lyricsOffsetValue = new QLabel;
+    m_lyricsOffsetValue->setMinimumWidth(110);
+    timingRow->addWidget(timingLabel);
+    timingRow->addWidget(m_lyricsOffset, 1);
+    timingRow->addWidget(m_lyricsOffsetValue);
+    root->addLayout(timingRow);
+    auto *timingNote = new QLabel(
+        tr("If the text appears late, move the slider right; if early, left."));
+    timingNote->setObjectName("muted");
+    timingNote->setContentsMargins(28, 0, 0, 0);
+    root->addWidget(timingNote);
+
     root->addWidget(sectionTitle(tr("Position")));
     auto *positionRow = new QHBoxLayout;
     auto *hint = new QLabel(tr("Drag the overlay with the mouse to move it. "
@@ -108,6 +138,9 @@ OverlaySettingsPage::OverlaySettingsPage(OverlaySettings *settings, QWidget *par
     connect(m_enabled, &QCheckBox::toggled, m_settings, &OverlaySettings::setEnabled);
     connect(m_autoShow, &QCheckBox::toggled, m_settings, &OverlaySettings::setAutoShow);
     connect(m_autoHide, &QCheckBox::toggled, m_settings, &OverlaySettings::setAutoHide);
+    connect(m_lyrics, &QCheckBox::toggled, m_settings, &OverlaySettings::setLyricsEnabled);
+    connect(m_lyricsOffset, &QSlider::valueChanged, m_settings,
+            [this](int steps) { m_settings->setLyricsOffsetMs(steps * 50); });
     connect(m_hideDelay, &QSpinBox::valueChanged, m_settings,
             &OverlaySettings::setHideDelaySec);
     connect(m_alwaysOnTop, &QCheckBox::toggled, m_settings,
@@ -142,6 +175,15 @@ void OverlaySettingsPage::refresh() {
     setChecked(m_alwaysOnTop, m_settings->alwaysOnTop());
     setChecked(m_clickThrough, m_settings->clickThrough());
     setChecked(m_animations, m_settings->animations());
+    setChecked(m_lyrics, m_settings->lyricsEnabled());
+    {
+        QSignalBlocker blocker(m_lyricsOffset);
+        m_lyricsOffset->setValue(m_settings->lyricsOffsetMs() / 50);
+    }
+    m_lyricsOffset->setEnabled(m_settings->lyricsEnabled());
+    m_lyricsOffsetValue->setText(
+        QStringLiteral("%1%2 ms").arg(m_settings->lyricsOffsetMs() > 0 ? "+" : "")
+            .arg(m_settings->lyricsOffsetMs()));
 
     {
         QSignalBlocker blocker(m_hideDelay);

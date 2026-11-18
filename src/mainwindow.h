@@ -16,6 +16,7 @@ class QMenu;
 class QAction;
 class AirPlayWorker;
 class LogViewer;
+class LyricsState;
 class MediaState;
 class OverlaySettings;
 class QListWidget;
@@ -27,7 +28,7 @@ class MainWindow : public QMainWindow {
 public:
     static constexpr int RestartExitCode = 100;
 
-    MainWindow(MediaState *media, OverlaySettings *overlaySettings,
+    MainWindow(MediaState *media, LyricsState *lyrics, OverlaySettings *overlaySettings,
                QWidget *parent = nullptr);
     ~MainWindow() override;
 
@@ -65,6 +66,7 @@ private:
     void applyRendererAndFullscreenArgs(QStringList &args);
 
     MediaState *m_media = nullptr;
+    LyricsState *m_lyrics = nullptr;
     OverlaySettings *m_overlaySettings = nullptr;
     QListWidget *m_sidebar = nullptr;
     QStackedWidget *m_pages = nullptr;

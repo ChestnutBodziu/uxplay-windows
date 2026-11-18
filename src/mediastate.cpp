@@ -156,6 +156,7 @@ void MediaState::onProgress(quint32 start, quint32 current, quint32 end) {
     m_sinceBase.restart();
     qInfo() << "[media] progress:" << m_basePositionMs << "/" << m_durationMs
             << "ms";
+    emit progressReported(m_basePositionMs, m_durationMs);
     emit positionChanged(positionMs(), m_durationMs);
 }
 

@@ -6,6 +6,7 @@
 #include "mediastate.h"
 
 class DacpClient;
+class LyricsState;
 class OverlaySettings;
 class OverlayWindow;
 class QAction;
@@ -16,7 +17,7 @@ class OverlayController : public QObject {
     Q_OBJECT
 
 public:
-    OverlayController(const MediaState *media, DacpClient *dacp,
+    OverlayController(const MediaState *media, DacpClient *dacp, LyricsState *lyrics,
                       OverlaySettings *settings, QObject *parent = nullptr);
     ~OverlayController() override;
 

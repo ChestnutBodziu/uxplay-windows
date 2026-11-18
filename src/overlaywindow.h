@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class DacpClient;
+class LyricsState;
 class MediaState;
 class OverlaySettings;
 
@@ -14,7 +15,7 @@ class OverlayWindow : public QWidget {
     Q_OBJECT
 
 public:
-    OverlayWindow(const MediaState *media, DacpClient *dacp,
+    OverlayWindow(const MediaState *media, DacpClient *dacp, LyricsState *lyrics,
                   OverlaySettings *settings, QWidget *parent = nullptr);
 
     // Fade in/out (instant when animations are off). Never takes focus.
@@ -40,6 +41,12 @@ private:
     bool buttonEnabled() const;
     void paintButton(class QPainter &p, Button button) const;
     void trigger(Button button);
+    QPoint logicalPoint(const QPointF &windowPos) const;
+    bool lyricsViewActive() const;
+    bool lyricsToggleAvailable() const;
+    QRect lyricsToggleRect() const;
+    QString lyricsLine() const;
+    void paintLyricsView(class QPainter &p, const QRectF &area) const;
     void applySettings();
     void applyFlags();
     void placeOnScreen();
@@ -49,8 +56,10 @@ private:
 
     const MediaState *m_media;
     DacpClient *m_dacp;
+    LyricsState *m_lyrics;
     Button m_hover = Button::None;
     Button m_pressed = Button::None;
+    bool m_pressedToggle = false;
     OverlaySettings *m_settings;
     QVariantAnimation m_fade;
     qreal m_fadeValue = 0.0;

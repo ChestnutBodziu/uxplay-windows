@@ -7,11 +7,12 @@
 #include <QMenu>
 
 OverlayController::OverlayController(const MediaState *media, DacpClient *dacp,
-                                     OverlaySettings *settings, QObject *parent)
+                                     LyricsState *lyrics, OverlaySettings *settings,
+                                     QObject *parent)
     : QObject(parent),
       m_media(media),
       m_settings(settings),
-      m_window(new OverlayWindow(media, dacp, m_settings)) {
+      m_window(new OverlayWindow(media, dacp, lyrics, m_settings)) {
     m_hideTimer.setSingleShot(true);
     connect(&m_hideTimer, &QTimer::timeout, this, [this]() {
         m_window->hideOverlay();

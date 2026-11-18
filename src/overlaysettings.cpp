@@ -28,6 +28,10 @@ OverlaySettings::OverlaySettings(QObject *parent) : QObject(parent) {
     m_animations = settings.value("animations", true).toBool();
     m_clickThrough = settings.value("click_through", false).toBool();
     m_autoHide = settings.value("auto_hide", true).toBool();
+    m_lyricsEnabled = settings.value("lyrics_enabled", false).toBool();
+    m_lyricsView = settings.value("lyrics_view", false).toBool();
+    m_lyricsOffsetMs = std::clamp(settings.value("lyrics_offset_ms", 300).toInt(),
+                                  kMinLyricsOffsetMs, kMaxLyricsOffsetMs);
     m_hideDelay = std::clamp(settings.value("hide_delay_sec", 5).toInt(),
                              kMinHideDelaySec, kMaxHideDelaySec);
 }
@@ -57,6 +61,15 @@ void OverlaySettings::setScalePercent(int value) {
 
 void OverlaySettings::setOpacityPercent(int value) {
     update(m_opacity, std::clamp(value, kMinOpacity, kMaxOpacity), "opacity");
+}
+
+void OverlaySettings::setLyricsEnabled(bool value) { update(m_lyricsEnabled, value, "lyrics_enabled"); }
+void OverlaySettings::setLyricsView(bool value) { update(m_lyricsView, value, "lyrics_view"); }
+
+void OverlaySettings::setLyricsOffsetMs(int value) {
+    update(m_lyricsOffsetMs,
+           std::clamp(value, kMinLyricsOffsetMs, kMaxLyricsOffsetMs),
+           "lyrics_offset_ms");
 }
 
 void OverlaySettings::setHideDelaySec(int value) {

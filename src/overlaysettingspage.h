@@ -28,6 +28,9 @@ private:
     QCheckBox *m_clickThrough;
     QCheckBox *m_animations;
     QCheckBox *m_autoHide;
+    QCheckBox *m_lyrics;
+    QSlider *m_lyricsOffset;
+    QLabel *m_lyricsOffsetValue;
     QSpinBox *m_hideDelay;
     QComboBox *m_mode;
     QSlider *m_scale;

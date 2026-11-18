@@ -45,6 +45,8 @@ signals:
     void trackChanged();
     void coverChanged();
     void positionChanged(qint64 positionMs, qint64 durationMs);
+    // Only when the device itself reported a position (not the local 1 Hz tick).
+    void progressReported(qint64 positionMs, qint64 durationMs);
     void volumeChanged(double volume);
     void dacpChanged();
 

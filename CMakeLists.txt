@@ -18,6 +18,9 @@ add_executable(uxplay-windows WIN32
     src/airplayevents.cpp
     src/mediastate.cpp
     src/dacpclient.cpp
+    src/lyrics.cpp
+    src/lyricsprovider.cpp
+    src/lyricsstate.cpp
     src/overlaysettings.cpp
     src/overlaywindow.cpp
     src/overlaycontroller.cpp

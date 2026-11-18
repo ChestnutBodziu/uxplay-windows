@@ -18,6 +18,8 @@ public:
     static constexpr int kMaxScale = 150;
     static constexpr int kMinOpacity = 20;
     static constexpr int kMaxOpacity = 100;
+    static constexpr int kMinLyricsOffsetMs = -3000;
+    static constexpr int kMaxLyricsOffsetMs = 3000;
     static constexpr int kMinHideDelaySec = 0;
     static constexpr int kMaxHideDelaySec = 60;
 
@@ -35,6 +37,12 @@ public:
     bool clickThrough() const { return m_clickThrough; }
     bool autoHide() const { return m_autoHide; }
     int hideDelaySec() const { return m_hideDelay; }
+    // Online lyrics (LRCLIB). Off by default: title/artist/album leave the PC.
+    bool lyricsEnabled() const { return m_lyricsEnabled; }
+    // Overlay shows lyrics instead of the cover (only meaningful when enabled).
+    bool lyricsView() const { return m_lyricsView; }
+    // Shifts lyrics timing: positive shows each line earlier.
+    int lyricsOffsetMs() const { return m_lyricsOffsetMs; }
 
     void setEnabled(bool value);
     void setAutoShow(bool value);
@@ -48,6 +56,9 @@ public:
     void setClickThrough(bool value);
     void setAutoHide(bool value);
     void setHideDelaySec(int value);
+    void setLyricsEnabled(bool value);
+    void setLyricsView(bool value);
+    void setLyricsOffsetMs(int value);
 
 signals:
     void changed();
@@ -68,4 +79,7 @@ private:
     bool m_clickThrough = false;
     bool m_autoHide = true;
     int m_hideDelay = 5;
+    bool m_lyricsEnabled = false;
+    bool m_lyricsView = false;
+    int m_lyricsOffsetMs = 300;
 };

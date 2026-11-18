@@ -65,9 +65,9 @@ BOOL CALLBACK EnumWindowsProcRename(HWND hwnd, LPARAM lParam) {
     return TRUE;
 }
 
-MainWindow::MainWindow(MediaState *media, OverlaySettings *overlaySettings,
-                       QWidget *parent)
-    : QMainWindow(parent), m_media(media), m_overlaySettings(overlaySettings) {
+MainWindow::MainWindow(MediaState *media, LyricsState *lyrics,
+                       OverlaySettings *overlaySettings, QWidget *parent)
+    : QMainWindow(parent), m_media(media), m_lyrics(lyrics), m_overlaySettings(overlaySettings) {
     ensureSettingsFileExists();
     setupTray();
     setupUI();
@@ -213,7 +213,7 @@ void MainWindow::setupUI() {
 
     // --- Now playing -------------------------------------------------------
     if (m_media) {
-        addPage(QChar(0xE768), tr("Now playing"), new NowPlayingPage(m_media));
+        addPage(QChar(0xE768), tr("Now playing"), new NowPlayingPage(m_media, m_lyrics, m_overlaySettings));
     }
 
     // --- Overlay -------------------------------------------------------------
