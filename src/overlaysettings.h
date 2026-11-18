@@ -81,5 +81,5 @@ private:
     int m_hideDelay = 5;
     bool m_lyricsEnabled = false;
     bool m_lyricsView = false;
-    int m_lyricsOffsetMs = 300;
+    int m_lyricsOffsetMs = 0;
 };

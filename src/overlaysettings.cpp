@@ -30,7 +30,7 @@ OverlaySettings::OverlaySettings(QObject *parent) : QObject(parent) {
     m_autoHide = settings.value("auto_hide", true).toBool();
     m_lyricsEnabled = settings.value("lyrics_enabled", false).toBool();
     m_lyricsView = settings.value("lyrics_view", false).toBool();
-    m_lyricsOffsetMs = std::clamp(settings.value("lyrics_offset_ms", 300).toInt(),
+    m_lyricsOffsetMs = std::clamp(settings.value("lyrics_offset_ms", 0).toInt(),
                                   kMinLyricsOffsetMs, kMaxLyricsOffsetMs);
     m_hideDelay = std::clamp(settings.value("hide_delay_sec", 5).toInt(),
                              kMinHideDelaySec, kMaxHideDelaySec);
