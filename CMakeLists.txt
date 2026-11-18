@@ -17,6 +17,7 @@ add_executable(uxplay-windows WIN32
     src/airplayworker.cpp
     src/airplayevents.cpp
     src/mediastate.cpp
+    src/dacpclient.cpp
     src/overlaysettings.cpp
     src/overlaywindow.cpp
     src/overlaycontroller.cpp
@@ -37,6 +38,13 @@ target_link_libraries(uxplay-windows PRIVATE
     dwmapi
 )
 
+if(DEFINED ENV{BONJOUR_SDK_HOME})
+    set(UXPW_BONJOUR_SDK "$ENV{BONJOUR_SDK_HOME}")
+else()
+    set(UXPW_BONJOUR_SDK "${CMAKE_SOURCE_DIR}/Bonjour SDK")
+endif()
+
 target_include_directories(uxplay-windows PRIVATE
     ${CMAKE_SOURCE_DIR}/libuxplay
+    "${UXPW_BONJOUR_SDK}/Include"
 )

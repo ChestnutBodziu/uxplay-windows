@@ -1,4 +1,5 @@
 #include "airplayevents.h"
+#include "dacpclient.h"
 #include "mainwindow.h"
 #include "mediastate.h"
 #include "overlaycontroller.h"
@@ -331,10 +332,11 @@ int main(int argc, char *argv[]) {
     OverlaySettings overlaySettings;
     AirPlayEvents airplayEvents;
     MediaState mediaState(&airplayEvents);
+    DacpClient dacpClient(&mediaState);
     {
         MainWindow mainWindow(&mediaState, &overlaySettings);
         // Declared after the window: destroyed first, while the model is alive.
-        OverlayController overlay(&mediaState, &overlaySettings);
+        OverlayController overlay(&mediaState, &dacpClient, &overlaySettings);
         overlay.attachTrayMenu(mainWindow.trayMenu());
 #ifdef _WIN32
         window = &mainWindow;

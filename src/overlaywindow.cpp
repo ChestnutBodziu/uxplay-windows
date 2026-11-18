@@ -1,5 +1,6 @@
 #include "overlaywindow.h"
 
+#include "dacpclient.h"
 #include "mediastate.h"
 #include "overlaysettings.h"
 
@@ -12,11 +13,12 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QScreen>
+#include <QToolTip>
 #include <algorithm>
 
 namespace {
 constexpr QSize kCompactSize(320, 84);
-constexpr QSize kExpandedSize(360, 142);
+constexpr QSize kExpandedSize(360, 150);
 constexpr int kFadeMs = 180;
 constexpr int kScreenMargin = 16;
 
@@ -53,9 +55,10 @@ void drawElided(QPainter &p, const QRect &rect, const QFont &font,
 }
 } // namespace
 
-OverlayWindow::OverlayWindow(const MediaState *media, OverlaySettings *settings,
-                             QWidget *parent)
-    : QWidget(parent), m_media(media), m_settings(settings) {
+OverlayWindow::OverlayWindow(const MediaState *media, DacpClient *dacp,
+                             OverlaySettings *settings, QWidget *parent)
+    : QWidget(parent), m_media(media), m_dacp(dacp), m_settings(settings) {
+    setMouseTracking(true);
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
     setAttribute(Qt::WA_DeleteOnClose, false);
@@ -86,6 +89,7 @@ OverlayWindow::OverlayWindow(const MediaState *media, OverlaySettings *settings,
     connect(m_media, &MediaState::stateChanged, this, repaint);
     connect(m_media, &MediaState::deviceChanged, this, repaint);
     connect(m_media, &MediaState::positionChanged, this, repaint);
+    connect(m_dacp, &DacpClient::statusChanged, this, repaint);
     connect(m_settings, &OverlaySettings::changed, this,
             &OverlayWindow::applySettings);
 
@@ -278,7 +282,7 @@ void OverlayWindow::paintEvent(QPaintEvent *) {
                    kTextPrimary, title);
         drawElided(p, QRect(textX, 40, textWidth, 20), uiFont(12, false),
                    kTextSecondary, subtitle);
-        drawElided(p, QRect(textX, 60, textWidth, 20), uiFont(12, false),
+        drawElided(p, QRect(textX, 57, textWidth, 18), uiFont(12, false),
                    kTextSecondary, detail);
     } else {
         drawElided(p, QRect(textX, 12, textWidth, 22), uiFont(14, true),
@@ -287,23 +291,14 @@ void OverlayWindow::paintEvent(QPaintEvent *) {
                    kTextSecondary, subtitle);
     }
 
-    // Play/pause indicator (status only, not a button).
-    if (!expanded && state != MediaState::State::Disconnected) {
-        const QRectF glyph(bounds.width() - pad - 22, bounds.height() / 2 - 11,
-                           22, 22);
-        p.setPen(Qt::NoPen);
-        p.setBrush(kTextPrimary);
-        if (state == MediaState::State::Playing) {
-            p.drawRoundedRect(QRectF(glyph.left() + 3, glyph.top() + 2, 5, 18), 1.5, 1.5);
-            p.drawRoundedRect(QRectF(glyph.left() + 14, glyph.top() + 2, 5, 18), 1.5, 1.5);
-        } else {
-            QPainterPath tri;
-            tri.moveTo(glyph.left() + 4, glyph.top() + 1);
-            tri.lineTo(glyph.left() + 4, glyph.bottom() - 1);
-            tri.lineTo(glyph.right() - 2, glyph.center().y());
-            tri.closeSubpath();
-            p.drawPath(tri);
+    // Transport buttons. Enabled only when the device really accepts remote
+    // control (DACP); otherwise dimmed, with the reason in a tooltip.
+    if (buttonsVisible()) {
+        if (expanded) {
+            paintButton(p, Button::Previous);
+            paintButton(p, Button::Next);
         }
+        paintButton(p, Button::PlayPause);
     }
 
     // Progress.
@@ -345,23 +340,170 @@ void OverlayWindow::paintEvent(QPaintEvent *) {
     }
 }
 
-void OverlayWindow::mousePressEvent(QMouseEvent *event) {
-    if (event->button() == Qt::LeftButton) {
-        m_dragging = true;
-        m_dragOffset = event->globalPosition().toPoint() - frameGeometry().topLeft();
-        event->accept();
+bool OverlayWindow::buttonsVisible() const {
+    return m_media->state() != MediaState::State::Disconnected;
+}
+
+bool OverlayWindow::buttonEnabled() const {
+    return m_dacp && m_dacp->canControl();
+}
+
+QRect OverlayWindow::buttonRect(Button button) const {
+    const QSize size = baseSize();
+    if (m_settings->mode() == OverlaySettings::Mode::Compact) {
+        if (button == Button::PlayPause) {
+            return QRect(size.width() - 10 - 34, size.height() / 2 - 17, 34, 34);
+        }
+        return QRect();
     }
+    constexpr int x0 = 12 + 96 + 12;
+    constexpr int y = 78;
+    switch (button) {
+    case Button::Previous:
+        return QRect(x0, y, 30, 30);
+    case Button::PlayPause:
+        return QRect(x0 + 38, y, 30, 30);
+    case Button::Next:
+        return QRect(x0 + 76, y, 30, 30);
+    case Button::None:
+        break;
+    }
+    return QRect();
+}
+
+OverlayWindow::Button OverlayWindow::buttonAt(const QPointF &windowPos) const {
+    if (!buttonsVisible()) {
+        return Button::None;
+    }
+    const qreal scale = m_settings->scalePercent() / 100.0;
+    const QPoint logical = (windowPos / scale).toPoint();
+    for (Button button : {Button::Previous, Button::PlayPause, Button::Next}) {
+        if (buttonRect(button).contains(logical)) {
+            return button;
+        }
+    }
+    return Button::None;
+}
+
+void OverlayWindow::paintButton(QPainter &p, Button button) const {
+    const QRectF rect = buttonRect(button);
+    const bool enabled = buttonEnabled();
+    const bool hover = enabled && m_hover == button;
+    const bool pressed = enabled && m_pressed == button;
+
+    p.setPen(Qt::NoPen);
+    if (hover || pressed) {
+        p.setBrush(QColor(255, 255, 255, pressed ? 46 : 26));
+        p.drawEllipse(rect);
+    }
+    QColor color = kTextPrimary;
+    if (!enabled) {
+        color.setAlpha(110);
+    }
+    p.setBrush(color);
+
+    const QPointF c = rect.center();
+    const qreal s = rect.width() * 0.30; // half size of the glyph
+    const auto triangle = [&](qreal cx, qreal dir) {
+        QPainterPath tri;
+        tri.moveTo(cx - dir * s * 0.55, c.y() - s);
+        tri.lineTo(cx - dir * s * 0.55, c.y() + s);
+        tri.lineTo(cx + dir * s * 0.75, c.y());
+        tri.closeSubpath();
+        p.drawPath(tri);
+    };
+
+    switch (button) {
+    case Button::PlayPause:
+        if (m_media->state() == MediaState::State::Playing) {
+            p.drawRoundedRect(QRectF(c.x() - s * 0.85, c.y() - s, s * 0.6, s * 2), 1.5, 1.5);
+            p.drawRoundedRect(QRectF(c.x() + s * 0.25, c.y() - s, s * 0.6, s * 2), 1.5, 1.5);
+        } else {
+            triangle(c.x(), 1.0);
+        }
+        break;
+    case Button::Previous:
+        p.drawRoundedRect(QRectF(c.x() - s * 0.95, c.y() - s, s * 0.25, s * 2), 1, 1);
+        triangle(c.x() + s * 0.1, -1.0);
+        break;
+    case Button::Next:
+        p.drawRoundedRect(QRectF(c.x() + s * 0.7, c.y() - s, s * 0.25, s * 2), 1, 1);
+        triangle(c.x() - s * 0.1, 1.0);
+        break;
+    case Button::None:
+        break;
+    }
+}
+
+void OverlayWindow::trigger(Button button) {
+    if (!m_dacp || !m_dacp->canControl()) {
+        return;
+    }
+    switch (button) {
+    case Button::PlayPause:
+        m_dacp->playPause();
+        break;
+    case Button::Previous:
+        m_dacp->previousTrack();
+        break;
+    case Button::Next:
+        m_dacp->nextTrack();
+        break;
+    case Button::None:
+        break;
+    }
+}
+
+void OverlayWindow::mousePressEvent(QMouseEvent *event) {
+    if (event->button() != Qt::LeftButton) {
+        return;
+    }
+    const Button hit = buttonAt(event->position());
+    if (hit != Button::None && buttonEnabled()) {
+        m_pressed = hit;
+        update();
+        event->accept();
+        return;
+    }
+    m_dragging = true;
+    m_dragOffset = event->globalPosition().toPoint() - frameGeometry().topLeft();
+    event->accept();
 }
 
 void OverlayWindow::mouseMoveEvent(QMouseEvent *event) {
     if (m_dragging) {
         move(event->globalPosition().toPoint() - m_dragOffset);
         event->accept();
+        return;
+    }
+    const Button hit = buttonAt(event->position());
+    if (hit != m_hover) {
+        m_hover = hit;
+        update();
+    }
+    if (hit != Button::None && !buttonEnabled() && m_dacp) {
+        QToolTip::showText(event->globalPosition().toPoint(),
+                           m_dacp->unavailableReason(), this);
+    } else {
+        QToolTip::hideText();
     }
 }
 
 void OverlayWindow::mouseReleaseEvent(QMouseEvent *event) {
-    if (m_dragging && event->button() == Qt::LeftButton) {
+    if (event->button() != Qt::LeftButton) {
+        return;
+    }
+    if (m_pressed != Button::None) {
+        const Button pressed = m_pressed;
+        m_pressed = Button::None;
+        update();
+        if (buttonAt(event->position()) == pressed) {
+            trigger(pressed);
+        }
+        event->accept();
+        return;
+    }
+    if (m_dragging) {
         m_dragging = false;
         m_settings->setPosition(pos());
         event->accept();
@@ -369,12 +511,28 @@ void OverlayWindow::mouseReleaseEvent(QMouseEvent *event) {
 }
 
 void OverlayWindow::mouseDoubleClickEvent(QMouseEvent *event) {
-    if (event->button() == Qt::LeftButton) {
-        m_settings->setMode(m_settings->mode() == OverlaySettings::Mode::Compact
-                                ? OverlaySettings::Mode::Expanded
-                                : OverlaySettings::Mode::Compact);
-        event->accept();
+    if (event->button() != Qt::LeftButton) {
+        return;
     }
+    // A fast second click on a button is a second press, not a mode switch.
+    const Button hit = buttonAt(event->position());
+    if (hit != Button::None) {
+        mousePressEvent(event);
+        return;
+    }
+    m_settings->setMode(m_settings->mode() == OverlaySettings::Mode::Compact
+                            ? OverlaySettings::Mode::Expanded
+                            : OverlaySettings::Mode::Compact);
+    event->accept();
+}
+
+void OverlayWindow::leaveEvent(QEvent *event) {
+    QWidget::leaveEvent(event);
+    if (m_hover != Button::None) {
+        m_hover = Button::None;
+        update();
+    }
+    QToolTip::hideText();
 }
 
 void OverlayWindow::contextMenuEvent(QContextMenuEvent *event) {
