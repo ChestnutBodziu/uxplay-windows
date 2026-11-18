@@ -1,6 +1,9 @@
 #include "airplayevents.h"
 #include "mainwindow.h"
 #include "mediastate.h"
+#include "overlaycontroller.h"
+#include "overlaysettings.h"
+#include "theme.h"
 #include "sessionlog.h"
 #include <QApplication>
 #include <QDir>
@@ -311,6 +314,7 @@ int main(int argc, char *argv[]) {
     );
 #endif
 
+    Theme::apply(app);
     app.setQuitOnLastWindowClosed(false);
 
     if (!QSystemTrayIcon::isSystemTrayAvailable()) {
@@ -324,10 +328,14 @@ int main(int argc, char *argv[]) {
 
     int exitCode = 0;
     // Declared before the window so they are destroyed after the engine stopped.
+    OverlaySettings overlaySettings;
     AirPlayEvents airplayEvents;
     MediaState mediaState(&airplayEvents);
     {
-        MainWindow mainWindow;
+        MainWindow mainWindow(&mediaState, &overlaySettings);
+        // Declared after the window: destroyed first, while the model is alive.
+        OverlayController overlay(&mediaState, &overlaySettings);
+        overlay.attachTrayMenu(mainWindow.trayMenu());
 #ifdef _WIN32
         window = &mainWindow;
         if (activationPending) {

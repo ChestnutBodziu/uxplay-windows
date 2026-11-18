@@ -17,6 +17,12 @@ add_executable(uxplay-windows WIN32
     src/airplayworker.cpp
     src/airplayevents.cpp
     src/mediastate.cpp
+    src/overlaysettings.cpp
+    src/overlaywindow.cpp
+    src/overlaycontroller.cpp
+    src/overlaysettingspage.cpp
+    src/nowplayingpage.cpp
+    src/theme.cpp
     src/sessionlog.cpp
     src/logviewer.cpp
     src/mdns_responder.cpp
@@ -28,6 +34,7 @@ target_link_libraries(uxplay-windows PRIVATE
     Qt6::Network
     Qt6::Widgets
     uxplay
+    dwmapi
 )
 
 target_include_directories(uxplay-windows PRIVATE

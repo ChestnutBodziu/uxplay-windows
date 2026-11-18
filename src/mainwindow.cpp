@@ -2,6 +2,11 @@
 #include "airplayworker.h"
 #include "logviewer.h"
 #include "mdns_responder.hpp"
+#include "mediastate.h"
+#include "nowplayingpage.h"
+#include "overlaysettings.h"
+#include "overlaysettingspage.h"
+#include "theme.h"
 #include <windows.h>
 #include <winsvc.h>
 #include <io.h>
@@ -25,6 +30,10 @@
 #include <QStyle>
 #include <QSystemTrayIcon>
 #include <QComboBox>
+#include <QHBoxLayout>
+#include <QListWidget>
+#include <QScrollArea>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -56,7 +65,9 @@ BOOL CALLBACK EnumWindowsProcRename(HWND hwnd, LPARAM lParam) {
     return TRUE;
 }
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+MainWindow::MainWindow(MediaState *media, OverlaySettings *overlaySettings,
+                       QWidget *parent)
+    : QMainWindow(parent), m_media(media), m_overlaySettings(overlaySettings) {
     ensureSettingsFileExists();
     setupTray();
     setupUI();
@@ -157,40 +168,94 @@ QStringList MainWindow::getArgumentsFromFile() {
 void MainWindow::setupUI() {
     setWindowTitle("uxplay-windows");
     setWindowIcon(QApplication::windowIcon());
-    setFixedSize(320, 310);
+    resize(820, 580);
+    setMinimumSize(740, 500);
 
     auto *central = new QWidget(this);
     setCentralWidget(central);
-    auto *layout = new QVBoxLayout(central);
+    auto *rootLayout = new QHBoxLayout(central);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
 
-    m_statusLabel = new QLabel("Initializing...", this);
+    m_sidebar = new QListWidget(central);
+    m_sidebar->setObjectName("sidebar");
+    m_sidebar->setFixedWidth(200);
+    m_sidebar->setIconSize(QSize(20, 20));
+    m_sidebar->setFocusPolicy(Qt::NoFocus);
+    m_sidebar->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    rootLayout->addWidget(m_sidebar);
+
+    m_pages = new QStackedWidget(central);
+    m_pages->setObjectName("content");
+    rootLayout->addWidget(m_pages, 1);
+
+    // Every page lives in a scroll area so small windows never clip controls.
+    const auto addPage = [this](QChar glyph, const QString &name,
+                                QWidget *content) {
+        auto *holder = new QWidget;
+        auto *holderLayout = new QVBoxLayout(holder);
+        holderLayout->setContentsMargins(28, 24, 28, 24);
+        holderLayout->addWidget(content);
+        holderLayout->addStretch();
+
+        auto *scroll = new QScrollArea;
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setWidget(holder);
+        m_pages->addWidget(scroll);
+
+        auto *item = new QListWidgetItem(
+            Theme::glyphIcon(glyph, 20, QColor(0xc9, 0xc9, 0xd0)), name);
+        m_sidebar->addItem(item);
+    };
+
+    QSettings settings;
+
+    // --- Now playing -------------------------------------------------------
+    if (m_media) {
+        addPage(QChar(0xE768), tr("Now playing"), new NowPlayingPage(m_media));
+    }
+
+    // --- Overlay -------------------------------------------------------------
+    if (m_overlaySettings) {
+        addPage(QChar(0xE8A7), tr("Overlay"),
+                new OverlaySettingsPage(m_overlaySettings));
+    }
+
+    // --- Receiver ------------------------------------------------------------
+    auto *receiver = new QWidget;
+    auto *receiverLayout = new QVBoxLayout(receiver);
+    receiverLayout->setContentsMargins(0, 0, 0, 0);
+    auto *receiverTitle = new QLabel(tr("Receiver"));
+    receiverTitle->setObjectName("pageTitle");
+    receiverLayout->addWidget(receiverTitle);
+
+    m_statusLabel = new QLabel("Initializing...", receiver);
+    m_statusLabel->setObjectName("statusChip");
     m_statusLabel->setAlignment(Qt::AlignCenter);
-    layout->addWidget(m_statusLabel);
+    receiverLayout->addWidget(m_statusLabel, 0, Qt::AlignLeft);
+
+    auto *discovery = new QLabel(tr("Discovery and video"));
+    discovery->setObjectName("sectionTitle");
+    receiverLayout->addWidget(discovery);
 
     // Bluetooth Discovery Checkbox
-    m_bleCheckbox = new QCheckBox("Enable Bluetooth Discovery", this);
-    QSettings settings;
+    m_bleCheckbox = new QCheckBox("Enable Bluetooth Discovery", receiver);
     m_bleCheckbox->setChecked(settings.value("ble_enabled", true).toBool());
     connect(m_bleCheckbox, &QCheckBox::toggled, this, &MainWindow::toggleBle);
-    layout->addWidget(m_bleCheckbox);
-
-    m_autostartCheckbox = new QCheckBox("Open uxplay-windows at login", this);
-    m_autostartCheckbox->setChecked(isAutostartEnabled());
-    connect(m_autostartCheckbox, &QCheckBox::toggled,
-            this, &MainWindow::toggleAutostart);
-    layout->addWidget(m_autostartCheckbox);
+    receiverLayout->addWidget(m_bleCheckbox);
 
     // Force Fullscreen Checkbox
-    m_fullscreenCheckbox = new QCheckBox("Force Fullscreen (must select renderer)", this);
+    m_fullscreenCheckbox = new QCheckBox("Force Fullscreen (must select renderer)", receiver);
     m_fullscreenCheckbox->setChecked(
         settings.value("force_fs_enabled", false).toBool()
     );
     connect(m_fullscreenCheckbox, &QCheckBox::toggled, this,
             &MainWindow::toggleForceFullscreen);
-    layout->addWidget(m_fullscreenCheckbox);
+    receiverLayout->addWidget(m_fullscreenCheckbox);
 
     // Renderer dropdown
-    m_rendererCombo = new QComboBox(this);
+    m_rendererCombo = new QComboBox(receiver);
     m_rendererCombo->addItem("Video Renderer (Auto)", "auto");
     m_rendererCombo->addItem("D3D11", "d3d11");
     m_rendererCombo->addItem("D3D12", "d3d12");
@@ -205,27 +270,80 @@ void MainWindow::setupUI() {
     connect(m_rendererCombo,
             QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::onRendererChanged);
+    receiverLayout->addWidget(m_rendererCombo);
 
-    layout->addWidget(m_rendererCombo);
+    auto *advanced = new QLabel(tr("UxPlay arguments"));
+    advanced->setObjectName("sectionTitle");
+    receiverLayout->addWidget(advanced);
 
-
-    m_settingsBtn = new QPushButton("Edit UxPlay Arguments (Advanced)", this);
+    auto *argumentButtons = new QHBoxLayout;
+    m_settingsBtn = new QPushButton("Edit UxPlay Arguments (Advanced)", receiver);
     connect(m_settingsBtn, &QPushButton::clicked, this, &MainWindow::openSettingsFile);
-    layout->addWidget(m_settingsBtn);
-
-    m_listargsBtn = new QPushButton("List UxPlay arguments", this);
+    argumentButtons->addWidget(m_settingsBtn);
+    m_listargsBtn = new QPushButton("List UxPlay arguments", receiver);
     connect(m_listargsBtn, &QPushButton::clicked, this, &MainWindow::openListArgsFile);
-    layout->addWidget(m_listargsBtn);
+    argumentButtons->addWidget(m_listargsBtn);
+    argumentButtons->addStretch();
+    receiverLayout->addLayout(argumentButtons);
+    addPage(QChar(0xE774), tr("Receiver"), receiver);
 
-    auto *logButton = new QPushButton("Open current log", this);
-    connect(logButton, &QPushButton::clicked, this, &MainWindow::openCurrentLog);
-    layout->addWidget(logButton);
+    // --- General ---------------------------------------------------------------
+    auto *general = new QWidget;
+    auto *generalLayout = new QVBoxLayout(general);
+    generalLayout->setContentsMargins(0, 0, 0, 0);
+    auto *generalTitle = new QLabel(tr("General"));
+    generalTitle->setObjectName("pageTitle");
+    generalLayout->addWidget(generalTitle);
 
-    m_licenseBtn = new QPushButton("License Information", this);
+    m_autostartCheckbox = new QCheckBox("Open uxplay-windows at login", general);
+    m_autostartCheckbox->setChecked(isAutostartEnabled());
+    connect(m_autostartCheckbox, &QCheckBox::toggled,
+            this, &MainWindow::toggleAutostart);
+    generalLayout->addWidget(m_autostartCheckbox);
+
+    m_licenseBtn = new QPushButton("License Information", general);
     connect(m_licenseBtn, &QPushButton::clicked, this, &MainWindow::showLicense);
-    layout->addWidget(m_licenseBtn);
+    generalLayout->addSpacing(8);
+    generalLayout->addWidget(m_licenseBtn, 0, Qt::AlignLeft);
+    addPage(QChar(0xE713), tr("General"), general);
 
-    layout->addStretch();
+    // --- Logs and diagnostics --------------------------------------------------
+    auto *logs = new QWidget;
+    auto *logsLayout = new QVBoxLayout(logs);
+    logsLayout->setContentsMargins(0, 0, 0, 0);
+    auto *logsTitle = new QLabel(tr("Logs and diagnostics"));
+    logsTitle->setObjectName("pageTitle");
+    logsLayout->addWidget(logsTitle);
+
+    const QString logPath = qApp->property("sessionLogPath").toString();
+    auto *logPathLabel = new QLabel(
+        logPath.isEmpty() ? tr("No session log is available.")
+                          : tr("Current session log:\n%1")
+                                .arg(QDir::toNativeSeparators(logPath)));
+    logPathLabel->setObjectName("muted");
+    logPathLabel->setWordWrap(true);
+    logPathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    logsLayout->addWidget(logPathLabel);
+    logsLayout->addSpacing(8);
+
+    auto *logButtons = new QHBoxLayout;
+    auto *logButton = new QPushButton("Open current log", logs);
+    connect(logButton, &QPushButton::clicked, this, &MainWindow::openCurrentLog);
+    logButtons->addWidget(logButton);
+    auto *folderButton = new QPushButton(tr("Open logs folder"), logs);
+    folderButton->setEnabled(!logPath.isEmpty());
+    connect(folderButton, &QPushButton::clicked, this, [logPath]() {
+        QDesktopServices::openUrl(
+            QUrl::fromLocalFile(QFileInfo(logPath).absolutePath()));
+    });
+    logButtons->addWidget(folderButton);
+    logButtons->addStretch();
+    logsLayout->addLayout(logButtons);
+    addPage(QChar(0xE9D9), tr("Logs"), logs);
+
+    connect(m_sidebar, &QListWidget::currentRowChanged, m_pages,
+            &QStackedWidget::setCurrentIndex);
+    m_sidebar->setCurrentRow(0);
     updateStatus();
 }
 
@@ -563,6 +681,11 @@ void MainWindow::quit() {
     m_quitting = true;
     stopServer();
     QApplication::quit();
+}
+
+void MainWindow::showEvent(QShowEvent *event) {
+    QMainWindow::showEvent(event);
+    Theme::useDarkTitleBar(this);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

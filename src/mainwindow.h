@@ -16,6 +16,10 @@ class QMenu;
 class QAction;
 class AirPlayWorker;
 class LogViewer;
+class MediaState;
+class OverlaySettings;
+class QListWidget;
+class QStackedWidget;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -23,11 +27,15 @@ class MainWindow : public QMainWindow {
 public:
     static constexpr int RestartExitCode = 100;
 
-    explicit MainWindow(QWidget *parent = nullptr);
+    MainWindow(MediaState *media, OverlaySettings *overlaySettings,
+               QWidget *parent = nullptr);
     ~MainWindow() override;
+
+    QMenu *trayMenu() const { return m_trayMenu; }
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     void onTrayActivated(QSystemTrayIcon::ActivationReason reason);
@@ -55,6 +63,11 @@ private:
     void stopBluetoothBeacon();
     void forwardBluetoothOutput(bool finished = false);
     void applyRendererAndFullscreenArgs(QStringList &args);
+
+    MediaState *m_media = nullptr;
+    OverlaySettings *m_overlaySettings = nullptr;
+    QListWidget *m_sidebar = nullptr;
+    QStackedWidget *m_pages = nullptr;
 
     QProcess *m_beacon = nullptr;
     QByteArray m_beaconOutput;
